@@ -202,7 +202,7 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bot
       <div class="fitem"><label>性別</label><select id="f_gender" style="width:100%"><option value=""></option><option>男性</option><option>女性</option><option>その他</option></select></div>
       <div class="fitem"><label>在留資格 *</label><select id="f_visa" style="width:100%"></select></div>
       <div class="fitem"><label>在留期限</label><input type="date" id="f_visaExpiry" style="width:100%"></div>
-      <div class="fitem"><label>日本語レベル(JLPT)</label><select id="f_jp" style="width:100%"><option value="">未取得/不明</option><option>N1</option><option>N2</option><option>N3</option><option>N4</option><option>N5</option></select></div>
+      <div class="fitem"><label>日本語レベル(JLPT)</label><select id="f_jp" style="width:100%"><option value="">未取得/不明</option><option>N1</option><option>N2</option><option>N3</option><option>N4</option><option>N5</option><option>JFT-Basic</option></select></div>
       <div class="fitem wide"><label>保有資格</label><div class="checks" id="f_quals"></div></div>
       <div class="fitem"><label>介護経験年数</label><input type="number" id="f_exp" min="0" style="width:100%"></div>
       <div class="fitem"><label>希望勤務地（複数は「、」区切り）</label><input type="text" id="f_loc" placeholder="例: 大阪市、堺市" style="width:100%"></div>
@@ -265,10 +265,10 @@ let sb=null;
 try{sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);}catch(e){}
 
 // ===== 定数 =====
-const VISAS=["特定技能1号","特定技能2号","介護","技能実習","永住者","定住者","日本人の配偶者等","永住者の配偶者等","家族滞在","留学","技術・人文知識・国際業務","特定活動(EPA)","その他"];
-const QUALS=["介護福祉士","実務者研修","初任者研修","介護技能評価試験合格","介護日本語評価試験合格","普通自動車免許","看護師(母国)","その他資格"];
+const VISAS=["特定技能1号","特定技能2号","介護","技能実習","特定活動","永住者","定住者","日本人の配偶者等","永住者の配偶者等","家族滞在","留学","技術・人文知識・国際業務","特定活動(EPA)","その他"];
+const QUALS=["介護福祉士","実務者研修","初任者研修","認知症介護基礎研修","介護技能評価試験合格","介護日本語評価試験合格","介護技能実習評価試験","飲食料品製造業","工業製品製造業","外食業","専門級(介護)","専門級(食品製造)","専門級(プラスチック成形)","専門級(溶接)","食品製造技能実習評価試験","機械加工技能実習評価試験","溶接技能実習評価試験","建設技能実習評価試験","普通自動車免許","看護師(母国)","その他資格"];
 const NATIONS=["ベトナム","フィリピン","インドネシア","ミャンマー","ネパール","中国","韓国","タイ","カンボジア","スリランカ","モンゴル","ブラジル","ペルー","バングラデシュ","インド"];
-const JPLV={"N1":5,"N2":4,"N3":3,"N4":2,"N5":1,"":0};
+const JPLV={"N1":5,"N2":4,"N3":3,"N4":2,"JFT-Basic":2,"N5":1,"":0};
 
 // ===== データ（Supabase同期） =====
 let DB={cands:[],jobs:[]};

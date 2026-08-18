@@ -341,8 +341,9 @@ function mapVisa_(v) {
   if (v.indexOf("技能実習") >= 0) return "技能実習";
   if (v.indexOf("特定技能1") >= 0 || v.indexOf("特定技能１") >= 0) return "特定技能1号";
   if (v.indexOf("特定技能2") >= 0 || v.indexOf("特定技能２") >= 0) return "特定技能2号";
+  if (v.indexOf("特定活動") >= 0) return "特定活動";
   if (v.indexOf("留学") >= 0) return "留学";
-  return "その他"; // 特定活動など(原文はメモに残る)
+  return "その他"; // 不明なもの(原文はメモに残る)
 }
 
 function mapJpLevel_(arr) {
@@ -352,19 +353,39 @@ function mapJpLevel_(arr) {
   for (var i = 0; i < levels.length; i++) {
     if (s.indexOf(levels[i]) >= 0) return levels[i]; // 最上位を採用
   }
+  if (s.indexOf("JFT") >= 0) return "JFT-Basic"; // JLPT未取得でJFT合格の場合(N4相当)
   return "";
 }
+
+// フォームの資格選択肢 → アプリの資格名(前方一致ではなく含有判定、上から順に評価)
+var QUAL_MAP = [
+  ["介護技能実習評価試験", "介護技能実習評価試験"],
+  ["食品製造技能実習評価試験", "食品製造技能実習評価試験"],
+  ["機械加工技能実習評価試験", "機械加工技能実習評価試験"],
+  ["溶接技能実習評価試験", "溶接技能実習評価試験"],
+  ["建設技能実習評価試験", "建設技能実習評価試験"],
+  ["専門級（介護）", "専門級(介護)"],
+  ["専門級（食品製造）", "専門級(食品製造)"],
+  ["専門級（プラスチック成形）", "専門級(プラスチック成形)"],
+  ["専門級（溶接）", "専門級(溶接)"],
+  ["初任者研修", "初任者研修"],
+  ["実務者研修", "実務者研修"],
+  ["介護福祉士", "介護福祉士"],
+  ["認知症", "認知症介護基礎研修"],
+  ["飲食料品製造", "飲食料品製造業"],
+  ["工業製品製造", "工業製品製造業"],
+  ["外食", "外食業"]
+];
 
 function mapQuals_(arr) {
   if (!arr) return [];
   var list = Array.isArray(arr) ? arr : [String(arr)];
   var out = [];
   list.forEach(function (v) {
-    if (v.indexOf("初任者研修") >= 0) push_(out, "初任者研修");
-    else if (v.indexOf("実務者研修") >= 0) push_(out, "実務者研修");
-    else if (v.indexOf("介護福祉士") >= 0) push_(out, "介護福祉士");
-    else if (v.indexOf("介護技能実習評価試験") >= 0) push_(out, "介護技能評価試験合格");
-    else push_(out, "その他資格"); // アプリの選択肢にないもの(原文はメモに残る)
+    for (var i = 0; i < QUAL_MAP.length; i++) {
+      if (v.indexOf(QUAL_MAP[i][0]) >= 0) { push_(out, QUAL_MAP[i][1]); return; }
+    }
+    push_(out, "その他資格"); // どれにも該当しないもの(原文はメモに残る)
   });
   return out;
 }
