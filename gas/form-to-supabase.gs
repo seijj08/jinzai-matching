@@ -2,20 +2,23 @@
  * YSタレント求人登録フォーム → Supabase(gm_cands) 自動連携
  * =========================================================
  * 機能:
- *  1. setup() を1回実行すると:
+ *  1. setup() を実行すると:
  *     - 既存フォーム(インドネシア語版)の先頭に「国籍」質問を追加
- *     - ミャンマー語版・ベトナム語版フォームを自動作成(国籍質問付き)
+ *     - 「希望月給」「夜勤(可/不可/要相談)」質問を追加
+ *     - ミャンマー語版・ベトナム語版フォームを自動作成(同じ質問構成)
  *     - 3フォームすべてに回答送信トリガーを設定
+ *     ※何度実行しても質問・フォーム・トリガーは重複しません(再実行OK)
  *  2. 以後、誰かがフォームに回答すると onFormSubmit() が動き、
  *     マッチング管理アプリの人材プール(Supabase gm_cands)に自動登録される
  *
  * セットアップ手順:
  *  1. https://script.google.com で「新しいプロジェクト」を作成
+ *     (既存フォームの編集権限があるGoogleアカウントで!)
  *  2. このファイルの中身を全部貼り付ける
  *  3. 下の CONFIG の SB_EMAIL / SB_PASSWORD をアプリのログイン情報に書き換える
  *  4. testSupabaseConnection() を実行 → ログに「接続OK」が出ることを確認
- *  5. setup() を実行(権限承認が2回ほど出るので許可する)
- *  6. ログに表示されるミャンマー語版・ベトナム語版のURLを控える
+ *  5. setup() を実行(権限承認が出るので許可する)
+ *  6. ログに表示される各言語版のURLを控える
  */
 
 // ===== CONFIG =====
@@ -30,90 +33,91 @@ var CONFIG = {
   SB_PASSWORD: "ここにアプリのログインパスワード"
 };
 
-// ===== 翻訳データ =====
-// 国籍質問(各言語版の先頭に追加)
-var NATIONALITY_Q = {
-  id: { title: "Kewarganegaraan（国籍）", choices: ["Indonesia（インドネシア）", "Myanmar（ミャンマー）", "Vietnam（ベトナム）", "Lainnya（その他）"] },
-  my: { title: "နိုင်ငံသား（国籍）", choices: ["မြန်မာ（ミャンマー）", "အင်ဒိုနီးရှား（インドネシア）", "ဗီယက်နမ်（ベトナム）", "အခြား（その他）"] },
-  vi: { title: "Quốc tịch（国籍）", choices: ["Việt Nam（ベトナム）", "Indonesia（インドネシア）", "Myanmar（ミャンマー）", "Khác（その他）"] }
-};
-
-// 既存18問の翻訳(フォーム内の並び順どおり)。国籍質問追加後は index 1〜18 になる
+// =====================================================================
+// 翻訳データ(質問タイトル内の日本語キーワードで対応付け。並び順に依存しない)
+// =====================================================================
 var TRANSLATIONS = {
+  id: {
+    formName: null, // 既存フォームの名前は変えない
+    desc: null,
+    byKey: {
+      nationality: { title: "Kewarganegaraan（国籍）", choices: ["Indonesia（インドネシア）", "Myanmar（ミャンマー）", "Vietnam（ベトナム）", "Lainnya（その他）"] },
+      salary: { title: "Gaji Bulanan yang Diinginkan (Yen)（希望月給）", help: "Contoh: 250000 / 25万" },
+      night: { title: "Kerja Shift Malam（夜勤）", choices: ["Bisa（可）", "Tidak bisa（不可）", "Perlu konsultasi（要相談）"] }
+    }
+  },
   my: {
+    formName: "YSタレント求人登録（ミャンマー語版）",
     desc: "【YS TALENT】ဂျပန်နိုင်ငံ အလုပ်အကိုင် လျှောက်လွှာဖောင်",
-    titles: [
-      "အမည်အပြည့်အစုံ（フルネーム）",
-      "အမည် (Katakana ဖြင့်)（カタカナ）",
-      "ဖုန်းနံပါတ် (Viber/WhatsApp)（携帯番号）",
-      "ဂျပန်ဖုန်းနံပါတ်（日本の番号）",
-      "ကျား/မ（性別）",
-      "လက်ရှိနေထိုင်ရာနိုင်ငံ（住んでいます）",
-      "လက်ရှိနေရပ်လိပ်စာ（現住所）",
-      "လက်ရှိအလုပ်အကိုင်（就職）",
-      "လက်ရှိအလုပ်လုပ်နေသော ကုမ္ပဏီအမည် (မရှိပါက「မရှိ」ဟုရေးပါ)（会社名）",
-      "ဂျပန်နိုင်ငံသို့ ပထမဆုံးရောက်ရှိသည့်နေ့（来日）",
-      "ဗီဇာအမျိုးအစား（在留資格）",
-      "ရရှိထားသော အောင်လက်မှတ်များ（習得資格）",
-      "ဂျပန်ဘာသာစွမ်းရည် အောင်လက်မှတ်（日本語資格）",
-      "လုပ်ကိုင်လိုသော အလုပ်အကိုင်နယ်ပယ်（就職希望）",
-      "အလုပ်လုပ်လိုသော ဒေသ（地域希望）",
-      "Tokutei Ginou ကျန်ရှိသက်တမ်း（残り在留期限）",
-      "Zairyuu Card သက်တမ်း（在留期限）",
-      "အလုပ်ကုဒ်နံပါတ်（求人コード）"
-    ],
-    gender: ["ကျား（男性）", "မ（女性）"],
-    domisili: ["ဂျပန်（日本）", "မြန်မာ（ミャンマー）"],
-    formName: "YSタレント求人登録（ミャンマー語版）"
+    byKey: {
+      nationality: { title: "နိုင်ငံသား（国籍）", choices: ["မြန်မာ（ミャンマー）", "အင်ဒိုနီးရှား（インドネシア）", "ဗီယက်နမ်（ベトナム）", "အခြား（その他）"] },
+      name: "အမည်အပြည့်အစုံ（フルネーム）",
+      kana: "အမည် (Katakana ဖြင့်)（カタカナ）",
+      phoneWA: "ဖုန်းနံပါတ် (Viber/WhatsApp)（携帯番号）",
+      phoneJP: "ဂျပန်ဖုန်းနံပါတ်（日本の番号）",
+      gender: { title: "ကျား/မ（性別）", choices: ["ကျား（男性）", "မ（女性）"] },
+      domisili: { title: "လက်ရှိနေထိုင်ရာနိုင်ငံ（住んでいます）", choices: ["ဂျပန်（日本）", "မြန်မာ（ミャンマー）"] },
+      address: "လက်ရှိနေရပ်လိပ်စာ（現住所）",
+      currentJob: "လက်ရှိအလုပ်အကိုင်（就職）",
+      company: "လက်ရှိအလုပ်လုပ်နေသော ကုမ္ပဏီအမည် (မရှိပါက「မရှိ」ဟုရေးပါ)（会社名）",
+      arrival: "ဂျပန်နိုင်ငံသို့ ပထမဆုံးရောက်ရှိသည့်နေ့（来日）",
+      visa: "ဗီဇာအမျိုးအစား（在留資格）",
+      quals: "ရရှိထားသော အောင်လက်မှတ်များ（習得資格）",
+      jp: "ဂျပန်ဘာသာစွမ်းရည် အောင်လက်မှတ်（日本語資格）",
+      field: "လုပ်ကိုင်လိုသော အလုပ်အကိုင်နယ်ပယ်（就職希望）",
+      desiredLoc: "အလုပ်လုပ်လိုသော ဒေသ（地域希望）",
+      salary: { title: "လိုချင်သော လစာ (ယန်း)（希望月給）", help: "ဥပမာ: 250000 / 25万" },
+      night: { title: "ညဆိုင်းအလုပ်（夜勤）", choices: ["ရနိုင်ပါသည်（可）", "မရနိုင်ပါ（不可）", "ဆွေးနွေးလိုပါသည်（要相談）"] },
+      visaRemain: "Tokutei Ginou ကျန်ရှိသက်တမ်း（残り在留期限）",
+      visaExpiry: "Zairyuu Card သက်တမ်း（在留期限）",
+      jobCode: "အလုပ်ကုဒ်နံပါတ်（求人コード）"
+    }
   },
   vi: {
+    formName: "YSタレント求人登録（ベトナム語版）",
     desc: "【YS TALENT】Phiếu đăng ký việc làm tại Nhật Bản",
-    titles: [
-      "Họ và tên（フルネーム）",
-      "Họ và tên bằng Katakana（カタカナ）",
-      "Số điện thoại (Zalo/WhatsApp)（携帯番号）",
-      "Số điện thoại tại Nhật（日本の番号）",
-      "Giới tính（性別）",
-      "Nơi ở hiện tại（住んでいます）",
-      "Địa chỉ hiện tại（現住所）",
-      "Công việc hiện tại（就職）",
-      "Tên công ty đang làm việc (Nếu không có, ghi \"không có\")（会社名）",
-      "Lần đầu đến Nhật（来日）",
-      "Loại visa（在留資格）",
-      "Chứng chỉ đang có（習得資格）",
-      "Chứng chỉ năng lực tiếng Nhật（日本語資格）",
-      "Ngành nghề mong muốn（就職希望）",
-      "Khu vực mong muốn（地域希望）",
-      "Thời hạn còn lại của Tokutei Ginou（残り在留期限）",
-      "Thời hạn thẻ lưu trú（在留期限）",
-      "Mã công việc（求人コード）"
-    ],
-    gender: ["Nam（男性）", "Nữ（女性）"],
-    domisili: ["Nhật Bản（日本）", "Việt Nam（ベトナム）"],
-    formName: "YSタレント求人登録（ベトナム語版）"
+    byKey: {
+      nationality: { title: "Quốc tịch（国籍）", choices: ["Việt Nam（ベトナム）", "Indonesia（インドネシア）", "Myanmar（ミャンマー）", "Khác（その他）"] },
+      name: "Họ và tên（フルネーム）",
+      kana: "Họ và tên bằng Katakana（カタカナ）",
+      phoneWA: "Số điện thoại (Zalo/WhatsApp)（携帯番号）",
+      phoneJP: "Số điện thoại tại Nhật（日本の番号）",
+      gender: { title: "Giới tính（性別）", choices: ["Nam（男性）", "Nữ（女性）"] },
+      domisili: { title: "Nơi ở hiện tại（住んでいます）", choices: ["Nhật Bản（日本）", "Việt Nam（ベトナム）"] },
+      address: "Địa chỉ hiện tại（現住所）",
+      currentJob: "Công việc hiện tại（就職）",
+      company: "Tên công ty đang làm việc (Nếu không có, ghi \"không có\")（会社名）",
+      arrival: "Lần đầu đến Nhật（来日）",
+      visa: "Loại visa（在留資格）",
+      quals: "Chứng chỉ đang có（習得資格）",
+      jp: "Chứng chỉ năng lực tiếng Nhật（日本語資格）",
+      field: "Ngành nghề mong muốn（就職希望）",
+      desiredLoc: "Khu vực mong muốn（地域希望）",
+      salary: { title: "Mức lương tháng mong muốn (Yên)（希望月給）", help: "Ví dụ: 250000 / 25万" },
+      night: { title: "Làm ca đêm（夜勤）", choices: ["Có thể（可）", "Không thể（不可）", "Cần trao đổi（要相談）"] },
+      visaRemain: "Thời hạn còn lại của Tokutei Ginou（残り在留期限）",
+      visaExpiry: "Thời hạn thẻ lưu trú（在留期限）",
+      jobCode: "Mã công việc（求人コード）"
+    }
   }
 };
 
 // =====================================================================
-// セットアップ(1回だけ実行)
+// セットアップ(何度実行してもOK)
 // =====================================================================
 function setup() {
-  // 1) インドネシア語版の先頭に国籍質問を追加
+  // 1) インドネシア語版: 国籍質問(先頭)+希望月給+夜勤を追加
   var src = FormApp.openById(CONFIG.FORM_ID_INDONESIA);
-  addNationalityQuestion_(src, NATIONALITY_Q.id);
-  Logger.log("✅ インドネシア語版に国籍質問を追加しました");
+  ensureNationality_(src, "id");
+  ensureExtraQuestions_(src, "id");
+  Logger.log("✅ インドネシア語版の質問を更新しました");
 
-  // 2) ミャンマー語版・ベトナム語版を作成
-  var myId = createTranslatedCopy_("my");
-  var viId = createTranslatedCopy_("vi");
+  // 2) ミャンマー語版・ベトナム語版を作成(既にあれば再利用)+ 翻訳 + 質問追加
+  var myId = ensureTranslatedCopy_("my");
+  var viId = ensureTranslatedCopy_("vi");
 
-  // 3) 回答送信トリガーを3フォームに設定
-  var props = PropertiesService.getScriptProperties();
-  props.setProperty("FORM_MY", myId);
-  props.setProperty("FORM_VI", viId);
-  [CONFIG.FORM_ID_INDONESIA, myId, viId].forEach(function (fid) {
-    ensureTrigger_(fid);
-  });
+  // 3) 回答送信トリガーを3フォームに設定(重複防止)
+  [CONFIG.FORM_ID_INDONESIA, myId, viId].forEach(ensureTrigger_);
 
   Logger.log("========================================");
   Logger.log("🎉 セットアップ完了！ 回答者用URL:");
@@ -124,53 +128,90 @@ function setup() {
 }
 
 // 国籍質問を先頭に追加(既にあれば何もしない)
-function addNationalityQuestion_(form, def) {
-  var exists = form.getItems().some(function (it) {
-    return it.getTitle().indexOf("国籍") >= 0;
-  });
-  if (exists) { Logger.log("国籍質問は既に存在します: " + form.getTitle()); return; }
+function ensureNationality_(form, lang) {
+  var def = TRANSLATIONS[lang].byKey.nationality;
+  var exists = form.getItems().some(function (it) { return it.getTitle().indexOf("国籍") >= 0; });
+  if (exists) return;
   var item = form.addMultipleChoiceItem();
   item.setTitle(def.title).setChoiceValues(def.choices).setRequired(true);
   form.moveItem(item.getIndex(), 0);
 }
 
-// 翻訳版フォームを作成
-function createTranslatedCopy_(lang) {
+// 希望月給・夜勤の質問を追加(既にあれば何もしない)。地域希望の直後に配置
+function ensureExtraQuestions_(form, lang) {
+  var t = TRANSLATIONS[lang].byKey;
+  var titles = form.getItems().map(function (it) { return it.getTitle(); });
+  var hasSalary = titles.some(function (s) { return s.indexOf("希望月給") >= 0; });
+  var hasNight = titles.some(function (s) { return s.indexOf("夜勤") >= 0; });
+
+  // 挿入位置 = 「地域希望」質問の直後(見つからなければ末尾)
+  function posAfterLoc() {
+    var items = form.getItems();
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].getTitle().indexOf("地域希望") >= 0) return items[i].getIndex() + 1;
+    }
+    return items.length - 1;
+  }
+
+  if (!hasSalary) {
+    var s = form.addTextItem();
+    s.setTitle(t.salary.title).setHelpText(t.salary.help);
+    form.moveItem(s.getIndex(), posAfterLoc());
+  }
+  if (!hasNight) {
+    var n = form.addMultipleChoiceItem();
+    n.setTitle(t.night.title).setChoiceValues(t.night.choices);
+    // 希望月給の直後に配置
+    var items = form.getItems(), pos = posAfterLoc();
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].getTitle().indexOf("希望月給") >= 0) { pos = items[i].getIndex() + 1; break; }
+    }
+    form.moveItem(n.getIndex(), pos);
+  }
+}
+
+// 翻訳版フォームを作成(既にあれば再利用)し、タイトル・選択肢を翻訳、質問を追加
+function ensureTranslatedCopy_(lang) {
   var t = TRANSLATIONS[lang];
   var props = PropertiesService.getScriptProperties();
-  var existing = props.getProperty(lang === "my" ? "FORM_MY" : "FORM_VI");
+  var propKey = lang === "my" ? "FORM_MY" : "FORM_VI";
+  var form = null;
+
+  var existing = props.getProperty(propKey);
   if (existing) {
-    try { FormApp.openById(existing); Logger.log(t.formName + " は作成済みです"); return existing; } catch (e) {}
+    try { form = FormApp.openById(existing); } catch (e) { form = null; }
   }
-  var copy = DriveApp.getFileById(CONFIG.FORM_ID_INDONESIA).makeCopy(t.formName);
-  var form = FormApp.openById(copy.getId());
+  if (!form) {
+    var copy = DriveApp.getFileById(CONFIG.FORM_ID_INDONESIA).makeCopy(t.formName);
+    form = FormApp.openById(copy.getId());
+    props.setProperty(propKey, form.getId());
+    Logger.log("✅ " + t.formName + " を新規作成しました");
+  } else {
+    Logger.log(t.formName + " は作成済み → 質問を更新します");
+  }
+
   form.setTitle(t.formName);
   form.setDescription(t.desc);
 
-  var items = form.getItems();
-  // 期待: 国籍(1) + 既存18問 = 19問
-  if (items.length !== t.titles.length + 1) {
-    Logger.log("⚠️ 質問数が想定(" + (t.titles.length + 1) + ")と異なります: " + items.length + "問。翻訳をスキップした質問がある可能性があります。");
-  }
-  // 先頭 = 国籍質問を翻訳
-  var natDef = NATIONALITY_Q[lang];
-  if (items.length > 0 && items[0].getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
-    items[0].asMultipleChoiceItem().setTitle(natDef.title).setChoiceValues(natDef.choices);
-  }
-  // 2問目以降を翻訳
-  for (var i = 1; i < items.length && i - 1 < t.titles.length; i++) {
-    var item = items[i];
-    var newTitle = t.titles[i - 1];
-    item.setTitle(newTitle);
-    // 性別・居住地は選択肢も翻訳
-    if (newTitle.indexOf("性別") >= 0 && item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
-      item.asMultipleChoiceItem().setChoiceValues(t.gender);
+  // 各質問を日本語キーワードで判定して翻訳(並び順に依存しない)
+  form.getItems().forEach(function (item) {
+    var key = detectKey_(item.getTitle());
+    if (!key || !t.byKey[key]) return;
+    var def = t.byKey[key];
+    if (typeof def === "string") {
+      item.setTitle(def);
+    } else {
+      item.setTitle(def.title);
+      if (def.help) item.setHelpText(def.help);
+      if (def.choices && item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
+        item.asMultipleChoiceItem().setChoiceValues(def.choices);
+      }
     }
-    if (newTitle.indexOf("住んでいます") >= 0 && item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
-      item.asMultipleChoiceItem().setChoiceValues(t.domisili);
-    }
-  }
-  Logger.log("✅ " + t.formName + " を作成しました");
+  });
+
+  // 国籍・希望月給・夜勤がまだ無ければ追加
+  ensureNationality_(form, lang);
+  ensureExtraQuestions_(form, lang);
   return form.getId();
 }
 
@@ -191,12 +232,10 @@ function ensureTrigger_(formId) {
 function onFormSubmit(e) {
   try {
     var responses = e.response.getItemResponses();
-    var a = {};   // 日本語キーワード → 回答
+    var a = {};   // フィールドキー → 回答
     responses.forEach(function (ir) {
-      var title = ir.getItem().getTitle();
-      var val = ir.getResponse();
-      var key = detectKey_(title);
-      if (key) a[key] = val;
+      var key = detectKey_(ir.getItem().getTitle());
+      if (key) a[key] = ir.getResponse();
     });
 
     var cand = buildCandidate_(a, e.source.getTitle());
@@ -218,6 +257,8 @@ function detectKey_(title) {
   if (title.indexOf("性別") >= 0) return "gender";
   if (title.indexOf("住んでいます") >= 0) return "domisili";
   if (title.indexOf("現住所") >= 0) return "address";
+  if (title.indexOf("希望月給") >= 0) return "salary";
+  if (title.indexOf("夜勤") >= 0) return "night";
   if (title.indexOf("就職希望") >= 0) return "field";      // 「就職」より先に判定
   if (title.indexOf("就職") >= 0) return "currentJob";
   if (title.indexOf("会社名") >= 0) return "company";
@@ -249,6 +290,7 @@ function buildCandidate_(a, formTitle) {
   addMemo("保有資格(原文)", a.quals);
   addMemo("日本語資格(原文)", a.jp);
   addMemo("就職希望分野", a.field);
+  addMemo("希望月給(原文)", a.salary);
   addMemo("残り在留期限", a.visaRemain);
   addMemo("求人コード", a.jobCode);
 
@@ -265,8 +307,8 @@ function buildCandidate_(a, formTitle) {
     quals: mapQuals_(a.quals),
     expYears: "",
     desiredLoc: String(a.desiredLoc || ""),
-    desiredSalary: null,
-    night: "応相談",
+    desiredSalary: parseSalary_(a.salary),
+    night: mapNight_(a.night),
     phone: String(a.phoneJP || a.phoneWA || ""),
     email: "",
     status: "未マッチ",
@@ -327,6 +369,30 @@ function mapQuals_(arr) {
   return out;
 }
 function push_(arr, v) { if (arr.indexOf(v) < 0) arr.push(v); }
+
+// 希望月給の回答を「万円」の数値に変換
+// 例: "250000"→25 / "25万"→25 / "25"→25 / "¥230,000"→23
+function parseSalary_(v) {
+  if (!v) return null;
+  // 全角数字→半角
+  var s = String(v).replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+  var m = s.replace(/[,，¥￥\s]/g, "").match(/\d+(\.\d+)?/);
+  if (!m) return null;
+  var n = parseFloat(m[0]);
+  if (s.indexOf("万") >= 0) return Math.round(n);   // 「25万」表記
+  if (n >= 1000) return Math.round(n / 10000);      // 円表記(250000など)
+  return Math.round(n);                              // 万円表記(25など)
+}
+
+// 夜勤の回答をアプリの選択肢(可/不可/応相談)に変換
+function mapNight_(v) {
+  if (!v) return "応相談";
+  v = String(v);
+  if (v.indexOf("不可") >= 0) return "不可";
+  if (v.indexOf("要相談") >= 0 || v.indexOf("相談") >= 0) return "応相談";
+  if (v.indexOf("可") >= 0) return "可";
+  return "応相談";
+}
 
 // =====================================================================
 // Supabase 連携
