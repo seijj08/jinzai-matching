@@ -261,6 +261,8 @@ if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudf
 // ===== Supabase 設定 =====
 const SUPABASE_URL="https://yfqzmmiughpenrvuaymm.supabase.co";
 const SUPABASE_ANON_KEY="sb_publishable_MHOfAdgTIU8ITDkpSbPFeA_aJchLFOn";
+// ===== Chatwork通知(GASウェブアプリ経由。未設定なら通知しない) =====
+const NOTIFY_URL="";
 let sb=null;
 try{sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);}catch(e){}
 
@@ -497,8 +499,16 @@ function openCandModal(id){
 }
 function setV(id,v){document.getElementById(id).value=v??"";}
 function gV(id){return document.getElementById(id).value.trim();}
+function notifyMatch(c){
+  if(!NOTIFY_URL)return;
+  try{
+    fetch(NOTIFY_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({message:"マッチング成立！\n人材: "+c.name+(c.nationality?"（"+c.nationality+"）":"")})});
+  }catch(e){}
+}
 async function saveCand(){
   if(!gV("f_name")){toast("氏名は必須です");return;}
+  const prevStatus=editCandId?((DB.cands.find(x=>x.id===editCandId)||{}).status||""):"";
   const c={
     id:editCandId||uid(),name:gV("f_name"),kana:gV("f_kana"),nationality:gV("f_nationality"),birth:gV("f_birth"),
     gender:gV("f_gender"),visa:gV("f_visa"),visaExpiry:gV("f_visaExpiry"),jpLevel:gV("f_jp"),
@@ -508,6 +518,7 @@ async function saveCand(){
     createdAt:editCandId?(DB.cands.find(x=>x.id===editCandId)||{}).createdAt:new Date().toISOString()
   };
   if(!await upsertRow("gm_cands",c))return;
+  if(c.status==="マッチ済"&&prevStatus!=="マッチ済")notifyMatch(c);
   if(editCandId){DB.cands=DB.cands.map(x=>x.id===editCandId?c:x);}else{DB.cands.push(c);}
   closeModal("candModal");renderAll();toast("人材を保存しました");
 }

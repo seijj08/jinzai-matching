@@ -30,7 +30,10 @@ var CONFIG = {
   SUPABASE_ANON_KEY: "sb_publishable_MHOfAdgTIU8ITDkpSbPFeA_aJchLFOn",
   // ★マッチング管理アプリのログイン情報に書き換えてください★
   SB_EMAIL: "ここにアプリのログインメールアドレス",
-  SB_PASSWORD: "ここにアプリのログインパスワード"
+  SB_PASSWORD: "ここにアプリのログインパスワード",
+  // ★Chatwork通知(マッチング成立時)★
+  CHATWORK_TOKEN: "ここにChatworkのAPIトークン",
+  CHATWORK_ROOM_ID: "445043916"
 };
 
 // =====================================================================
@@ -469,4 +472,36 @@ function insertToSupabase_(cand) {
 function testSupabaseConnection() {
   var token = getSbToken_();
   Logger.log("✅ 接続OK(ログイン成功)。token: " + token.slice(0, 20) + "...");
+}
+
+// =====================================================================
+// Chatwork通知(マッチング成立時にアプリから呼ばれるWebアプリ)
+// 使い方: エディタ右上「デプロイ」→「新しいデプロイ」→種類「ウェブアプリ」
+//         アクセスできるユーザー「全員」でデプロイ → 発行されたURLをアプリに設定
+// =====================================================================
+function doPost(e) {
+  var body = {};
+  try { body = JSON.parse(e.postData.contents); } catch (err) {}
+  var msg = String(body.message || "マッチング成立！").slice(0, 500);
+  var code = sendChatwork_(msg);
+  return ContentService.createTextOutput(JSON.stringify({ status: code }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function sendChatwork_(msg) {
+  var res = UrlFetchApp.fetch("https://api.chatwork.com/v2/rooms/" + CONFIG.CHATWORK_ROOM_ID + "/messages", {
+    method: "post",
+    headers: { "X-ChatWorkToken": CONFIG.CHATWORK_TOKEN },
+    payload: { body: msg },
+    muteHttpExceptions: true
+  });
+  var code = res.getResponseCode();
+  if (code !== 200) Logger.log("❌ Chatwork送信失敗(" + code + "): " + res.getContentText());
+  return code;
+}
+
+// Chatwork接続テスト(トークン設定後に実行推奨)
+function testChatwork() {
+  var code = sendChatwork_("マッチング成立！(接続テスト)");
+  Logger.log(code === 200 ? "✅ Chatwork送信OK！チャットを確認してください" : "❌ 送信失敗(" + code + ")。トークンとルームIDを確認してください");
 }
