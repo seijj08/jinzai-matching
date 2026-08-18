@@ -212,7 +212,21 @@ function ensureTranslatedCopy_(lang) {
   // 国籍・希望月給・夜勤がまだ無ければ追加
   ensureNationality_(form, lang);
   ensureExtraQuestions_(form, lang);
+  publishForm_(form, t.formName);
   return form.getId();
+}
+
+// フォームを公開状態にする(未公開だと回答者URLが「ページがありません」になる)
+function publishForm_(form, name) {
+  try {
+    if (typeof form.isPublished === "function" && !form.isPublished()) {
+      form.setPublished(true);
+      Logger.log("📢 " + name + " を公開しました");
+    }
+  } catch (e) {
+    Logger.log("⚠️ " + name + " の自動公開に失敗しました。フォームの編集画面を開き、右上の「公開」ボタンを押してください。(" + e + ")");
+  }
+  try { form.setAcceptingResponses(true); } catch (e) {}
 }
 
 // トリガー設定(重複防止)
