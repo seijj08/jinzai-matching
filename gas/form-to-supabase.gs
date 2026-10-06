@@ -46,7 +46,12 @@ var TRANSLATIONS = {
     byKey: {
       nationality: { title: "Kewarganegaraan（国籍）", choices: ["Indonesia（インドネシア）", "Myanmar（ミャンマー）", "Vietnam（ベトナム）", "Lainnya（その他）"] },
       salary: { title: "Gaji Bulanan yang Diinginkan (Yen)（希望月給）", help: "Contoh: 250000 / 25万" },
-      night: { title: "Kerja Shift Malam（夜勤）", choices: ["Bisa（可）", "Tidak bisa（不可）", "Perlu konsultasi（要相談）"] }
+      night: { title: "Kerja Shift Malam（夜勤）", choices: ["Bisa（可）", "Tidak bisa（不可）", "Perlu konsultasi（要相談）"] },
+      consent: {
+        title: "Persetujuan Pemberian Data Pribadi（個人情報提供への同意）",
+        help: "Data pribadi yang Anda isi akan digunakan untuk pendaftaran kerja dan pencocokan lowongan, dan dapat diberikan kepada perusahaan yang menawarkan pekerjaan.（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供する場合があります。）",
+        choices: ["Setuju（同意する）", "Tidak setuju（同意しない）"]
+      }
     }
   },
   my: {
@@ -73,7 +78,12 @@ var TRANSLATIONS = {
       night: { title: "ညဆိုင်းအလုပ်（夜勤）", choices: ["ရနိုင်ပါသည်（可）", "မရနိုင်ပါ（不可）", "ဆွေးနွေးလိုပါသည်（要相談）"] },
       visaRemain: "Tokutei Ginou ကျန်ရှိသက်တမ်း（残り在留期限）",
       visaExpiry: "Zairyuu Card သက်တမ်း（在留期限）",
-      jobCode: "အလုပ်ကုဒ်နံပါတ်（求人コード）"
+      jobCode: "အလုပ်ကုဒ်နံပါတ်（求人コード）",
+      consent: {
+        title: "ကိုယ်ရေးကိုယ်တာအချက်အလက် ပေးအပ်ခြင်းအတွက် သဘောတူညီချက်（個人情報提供への同意）",
+        help: "ဖြည့်သွင်းထားသော ကိုယ်ရေးကိုယ်တာအချက်အလက်များကို အလုပ်အကိုင်မိတ်ဆက်ခြင်းနှင့် လိုက်ဖက်မှုရှာဖွေခြင်း ရည်ရွယ်ချက်ဖြင့် အသုံးပြုပြီး အလုပ်ခန့်မည့် ကုမ္ပဏီများသို့ ပေးအပ်နိုင်ပါသည်။（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供する場合があります。）",
+        choices: ["သဘောတူပါသည်（同意する）", "သဘောမတူပါ（同意しない）"]
+      }
     }
   },
   vi: {
@@ -100,7 +110,12 @@ var TRANSLATIONS = {
       night: { title: "Làm ca đêm（夜勤）", choices: ["Có thể（可）", "Không thể（不可）", "Cần trao đổi（要相談）"] },
       visaRemain: "Thời hạn còn lại của Tokutei Ginou（残り在留期限）",
       visaExpiry: "Thời hạn thẻ lưu trú（在留期限）",
-      jobCode: "Mã công việc（求人コード）"
+      jobCode: "Mã công việc（求人コード）",
+      consent: {
+        title: "Đồng ý cung cấp thông tin cá nhân（個人情報提供への同意）",
+        help: "Thông tin cá nhân bạn cung cấp sẽ được sử dụng cho mục đích giới thiệu việc làm và kết nối tuyển dụng, và có thể được cung cấp cho các công ty tuyển dụng.（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供する場合があります。）",
+        choices: ["Đồng ý（同意する）", "Không đồng ý（同意しない）"]
+      }
     }
   }
 };
@@ -113,6 +128,7 @@ function setup() {
   var src = FormApp.openById(CONFIG.FORM_ID_INDONESIA);
   ensureNationality_(src, "id");
   ensureExtraQuestions_(src, "id");
+  ensureConsent_(src, "id");
   Logger.log("✅ インドネシア語版の質問を更新しました");
 
   // 2) ミャンマー語版・ベトナム語版を作成(既にあれば再利用)+ 翻訳 + 質問追加
@@ -212,11 +228,22 @@ function ensureTranslatedCopy_(lang) {
     }
   });
 
-  // 国籍・希望月給・夜勤がまだ無ければ追加
+  // 国籍・希望月給・夜勤・同意確認がまだ無ければ追加
   ensureNationality_(form, lang);
   ensureExtraQuestions_(form, lang);
+  ensureConsent_(form, lang);
   publishForm_(form, t.formName);
   return form.getId();
+}
+
+// 個人情報提供への同意質問をフォーム最下部に追加(既にあれば何もしない)
+function ensureConsent_(form, lang) {
+  var def = TRANSLATIONS[lang].byKey.consent;
+  var exists = form.getItems().some(function (it) { return it.getTitle().indexOf("同意") >= 0; });
+  if (exists) return;
+  var item = form.addMultipleChoiceItem();
+  item.setTitle(def.title).setHelpText(def.help).setChoiceValues(def.choices).setRequired(true);
+  // 追加した質問は自動的に最下部に入る(移動不要)
 }
 
 // フォームを公開状態にする(未公開だと回答者URLが「ページがありません」になる)
@@ -287,6 +314,7 @@ function detectKey_(title) {
   if (title.indexOf("残り在留期限") >= 0) return "visaRemain"; // 「在留期限」より先に判定
   if (title.indexOf("在留期限") >= 0) return "visaExpiry";
   if (title.indexOf("求人コード") >= 0) return "jobCode";
+  if (title.indexOf("同意") >= 0) return "consent";
   return null;
 }
 
@@ -310,6 +338,7 @@ function buildCandidate_(a, formTitle) {
   addMemo("希望月給(原文)", a.salary);
   addMemo("残り在留期限", a.visaRemain);
   addMemo("求人コード", a.jobCode);
+  addMemo("個人情報提供への同意", mapConsent_(a.consent));
 
   return {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
@@ -420,6 +449,15 @@ function parseSalary_(v) {
   if (s.indexOf("万") >= 0) return Math.round(n);   // 「25万」表記
   if (n >= 1000) return Math.round(n / 10000);      // 円表記(250000など)
   return Math.round(n);                              // 万円表記(25など)
+}
+
+// 同意の回答を日本語に変換
+function mapConsent_(v) {
+  if (!v) return "";
+  v = String(v);
+  if (v.indexOf("同意しない") >= 0) return "同意しない";
+  if (v.indexOf("同意する") >= 0) return "同意する";
+  return v;
 }
 
 // 夜勤の回答をアプリの選択肢(可/不可/応相談)に変換
