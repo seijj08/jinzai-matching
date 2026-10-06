@@ -231,6 +231,13 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bot
       <div id="jobPdfStatus" class="small" style="margin-top:6px;font-weight:700"></div>
     </div>
     <input type="file" id="jobPdfInput" accept=".pdf" style="display:none" onchange="parseJobPDF(this.files[0])">
+    <div style="margin:10px 0;padding:10px;border:1px dashed var(--line);border-radius:8px">
+      <label style="font-size:12px;font-weight:700;color:var(--navy)">🤖 Claudeの解析結果(JSON)を貼り付けて反映</label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <textarea id="j_ai_json" placeholder='Claudeが出力した {"title": ...} をここに貼り付け' style="flex:1;min-height:40px;font-size:12px"></textarea>
+        <button class="btn sm" type="button" onclick="applyPastedJobJson()">反映</button>
+      </div>
+    </div>
     <div class="fgrid">
       <div class="fitem"><label>求人名 *</label><input type="text" id="j_title" style="width:100%"></div>
       <div class="fitem"><label>企業・施設名 *</label><input type="text" id="j_company" style="width:100%"></div>
@@ -787,12 +794,27 @@ async function jobPdfToImages(file,maxPages=2){
   }
   return imgs;
 }
+// Claudeで解析したJSONの貼り付け反映
+function applyPastedJobJson(){
+  const ta=document.getElementById("j_ai_json");
+  const st=document.getElementById("jobPdfStatus");
+  const raw=(ta.value||"").trim();
+  if(!raw){toast("JSONを貼り付けてください");return;}
+  const m=raw.match(/\{[\s\S]*\}/);
+  if(!m){st.textContent="⚠ JSONが見つかりませんでした。Claudeの出力をそのまま貼り付けてください。";return;}
+  try{
+    const d=JSON.parse(m[0]);
+    applyAIJob(d,st);
+    ta.value="";
+  }catch(e){st.textContent="⚠ JSONの形式が正しくありません: "+e.message;}
+}
 function applyAIJob(d,st){
   const found=[];
   const set=(id,v,label)=>{if(v===null||v===undefined||v==="")return;document.getElementById(id).value=v;found.push(label);};
   const setSel=(id,v,label)=>{if(!v)return;const el=document.getElementById(id);if([...el.options].some(o=>o.value===v)){el.value=v;found.push(label);}};
   set("j_title",d.title,"求人名");set("j_company",d.company,"企業・施設名");setSel("j_type",d.jobType,"職種");
   set("j_loc",d.location,"勤務地");set("j_salMin",d.salaryMin,"月給下限");set("j_salMax",d.salaryMax,"月給上限");
+  set("j_url",d.sourceUrl,"元データURL");set("j_memo",d.memo,"メモ");
   if(Array.isArray(d.reqQuals)&&d.reqQuals.length){
     let hit=false;
     document.querySelectorAll("#j_quals input").forEach(i=>{if(d.reqQuals.includes(i.value)){i.checked=true;hit=true;}});
