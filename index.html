@@ -742,6 +742,7 @@ function applyExtracted(text,st){
 }
 
 // ===== 求人票PDF 自動抽出 =====
+// 求人票のみAI解析を使用(求人票は個人情報をほぼ含まないため)。履歴書は従来のキーワード抽出のまま。
 async function parseJobPDF(file){
   if(!file)return;
   const st=document.getElementById("jobPdfStatus");
@@ -749,9 +750,61 @@ async function parseJobPDF(file){
   st.textContent="読み取り中...";
   try{
     const text=await extractPdfText(file);
-    if(!text.trim()){st.textContent="⚠ テキストを抽出できませんでした（スキャン画像PDFの可能性があります）。手入力をお願いします。";return;}
-    applyJobExtracted(text,st);
+    let images=null;
+    if(!text.trim()){
+      st.textContent="画像PDFのため紙面を画像化しています...";
+      images=await jobPdfToImages(file);
+    }
+    st.textContent="🤖 AIで解析中...（10秒ほどかかります）";
+    const d=await aiParseJob(text,images);
+    if(d){applyAIJob(d,st);return;}
+    if(!text.trim()){st.textContent="⚠ AI解析ができませんでした（スキャン画像PDF）。手入力をお願いします。";return;}
+    applyJobExtracted(text,st); // AI不可時は従来のキーワード抽出にフォールバック
   }catch(e){st.textContent="⚠ 読み取りに失敗しました: "+e.message;}
+}
+// 求人票テキスト/画像をGAS経由でGeminiに渡して構造化
+async function aiParseJob(text,images){
+  if(!NOTIFY_URL)return null;
+  try{
+    const r=await fetch(NOTIFY_URL,{method:"POST",headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({action:"parse",kind:"job",text:text||"",images:images||[]})});
+    const j=await r.json();
+    if(!j.ok)console.warn("AI解析スキップ:",j.error);
+    return j.ok?j.data:null;
+  }catch(e){console.warn("AI解析エラー:",e);return null;}
+}
+async function jobPdfToImages(file,maxPages=2){
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const imgs=[];
+  for(let p=1;p<=Math.min(pdf.numPages,maxPages);p++){
+    const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1.5});
+    const canvas=document.createElement("canvas");
+    canvas.width=vp.width;canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext("2d"),viewport:vp}).promise;
+    imgs.push(canvas.toDataURL("image/jpeg",0.8).split(",")[1]);
+  }
+  return imgs;
+}
+function applyAIJob(d,st){
+  const found=[];
+  const set=(id,v,label)=>{if(v===null||v===undefined||v==="")return;document.getElementById(id).value=v;found.push(label);};
+  const setSel=(id,v,label)=>{if(!v)return;const el=document.getElementById(id);if([...el.options].some(o=>o.value===v)){el.value=v;found.push(label);}};
+  set("j_title",d.title,"求人名");set("j_company",d.company,"企業・施設名");setSel("j_type",d.jobType,"職種");
+  set("j_loc",d.location,"勤務地");set("j_salMin",d.salaryMin,"月給下限");set("j_salMax",d.salaryMax,"月給上限");
+  if(Array.isArray(d.reqQuals)&&d.reqQuals.length){
+    let hit=false;
+    document.querySelectorAll("#j_quals input").forEach(i=>{if(d.reqQuals.includes(i.value)){i.checked=true;hit=true;}});
+    if(hit)found.push("必要資格");
+  }
+  if(Array.isArray(d.visas)&&d.visas.length){
+    let hit=false;
+    document.querySelectorAll("#j_visas input").forEach(i=>{if(d.visas.includes(i.value)){i.checked=true;hit=true;}});
+    if(hit)found.push("受入在留資格");
+  }
+  setSel("j_jp",d.jpLevel,"日本語レベル");setSel("j_night",d.night,"夜勤");set("j_head",d.headcount,"募集人数");
+  st.textContent=found.length?`🤖 AI自動反映: ${found.join("・")}（内容を必ずご確認ください）`:"⚠ 抽出できる項目が見つかりませんでした。手入力をお願いします。";
 }
 function toMan(s){
   // "23万" / "23.5万" / "230,000円" / "230000" → 万円数値

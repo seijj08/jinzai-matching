@@ -37,7 +37,10 @@ var CONFIG = {
   // ★週1回の募集中求人リマインダー(SP会議用)★
   SP_ROOM_ID: "",            // 送信先ルームID。空ならCHATWORK_ROOM_IDと同じルームに送る
   DIGEST_DAY: "MONDAY",      // 送信曜日: MONDAY / TUESDAY / WEDNESDAY / THURSDAY / FRIDAY
-  DIGEST_HOUR: 8             // 送信時間帯(8 = 午前8〜9時の間)
+  DIGEST_HOUR: 8,            // 送信時間帯(8 = 午前8〜9時の間)
+  // ★求人票PDFのAI解析(Gemini)。aistudio.google.com でAPIキーを取得★
+  // 注意: 必ず「課金設定済み(有料枠)」のプロジェクトのキーを使うこと(無料枠は学習利用され得るため)
+  GEMINI_API_KEY: "ここにGeminiのAPIキー"
 };
 
 // =====================================================================
@@ -524,10 +527,17 @@ function testSupabaseConnection() {
 function doPost(e) {
   var body = {};
   try { body = JSON.parse(e.postData.contents); } catch (err) {}
+  // 求人票のAI解析リクエスト
+  if (body.action === "parse") {
+    return jsonOut_(parseJobWithAI_(body));
+  }
+  // デフォルト: マッチング成立のChatwork通知
   var msg = String(body.message || "マッチング成立！").slice(0, 500);
   var code = sendChatwork_(msg);
-  return ContentService.createTextOutput(JSON.stringify({ status: code }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return jsonOut_({ status: code });
+}
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function sendChatwork_(msg, roomId) {
@@ -609,3 +619,67 @@ function setupWeeklyDigest() {
 
 // リマインダーの送信テスト(今すぐ1回送る)
 function testWeeklyDigest() { weeklyJobDigest(); }
+
+// =====================================================================
+// 求人票PDFのAI解析(Gemini)。対象は求人票のみ(個人情報をほぼ含まないため)。
+// 履歴書はAIに送らない方針(アプリ側も求人票のみ送信する実装)。
+// =====================================================================
+var JOB_PROMPT =
+  "あなたは日本の求人票から情報を抽出するアシスタントです。\n" +
+  "与えられた求人票のテキストまたは画像から、以下のJSONだけを出力してください。\n" +
+  "読み取れない項目は null にしてください。推測で埋めないでください。\n" +
+  "{\n" +
+  '  "title": "求人名(なければ 職種+施設名 で簡潔に作る)",\n' +
+  '  "company": "企業・施設名",\n' +
+  '  "jobType": "次のいずれか: 介護職員（施設） / 訪問介護 / デイサービス / 看護助手 / その他",\n' +
+  '  "location": "勤務地(市区町村まで)",\n' +
+  '  "salaryMin": 月給下限を万円の数値で(例: 230,000円→23),\n' +
+  '  "salaryMax": 月給上限を万円の数値で,\n' +
+  '  "reqQuals": ["必須資格。次のリストにあるものだけ: 介護福祉士, 実務者研修, 初任者研修, 認知症介護基礎研修, 介護技能評価試験合格, 介護日本語評価試験合格, 介護技能実習評価試験, 飲食料品製造業, 工業製品製造業, 外食業, 専門級(介護), 専門級(食品製造), 専門級(プラスチック成形), 専門級(溶接), 食品製造技能実習評価試験, 機械加工技能実習評価試験, 溶接技能実習評価試験, 建設技能実習評価試験, 普通自動車免許, 看護師(母国), その他資格"],\n' +
+  '  "visas": ["受入可能な在留資格。次のリストにあるものだけ: 特定技能1号, 特定技能2号, 介護, 技能実習, 特定活動, 永住者, 定住者, 日本人の配偶者等, 永住者の配偶者等, 家族滞在, 留学, 技術・人文知識・国際業務, 特定活動(EPA), その他"],\n' +
+  '  "jpLevel": "必要な日本語レベル。N1〜N5 のいずれか。不問なら null",\n' +
+  '  "night": "夜勤。次のいずれか: なし / あり（応相談） / 必須",\n' +
+  '  "headcount": 募集人数の数値\n' +
+  "}";
+
+function parseJobWithAI_(body) {
+  if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY.indexOf("ここに") === 0) {
+    return { ok: false, error: "GEMINI_API_KEY未設定(AI解析はスキップされ、従来の抽出が使われます)" };
+  }
+  if (body.kind !== "job") return { ok: false, error: "求人票以外のAI解析は無効です" };
+
+  var parts = [{ text: JOB_PROMPT }];
+  if (body.text && String(body.text).trim()) {
+    parts.push({ text: "----- 求人票テキスト -----\n" + String(body.text).slice(0, 30000) });
+  }
+  (body.images || []).slice(0, 3).forEach(function (b64) {
+    parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
+  });
+
+  var res = UrlFetchApp.fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + CONFIG.GEMINI_API_KEY, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({
+        contents: [{ parts: parts }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0 }
+      }),
+      muteHttpExceptions: true
+    });
+  if (res.getResponseCode() !== 200) {
+    return { ok: false, error: "Gemini(" + res.getResponseCode() + "): " + res.getContentText().slice(0, 300) };
+  }
+  try {
+    var out = JSON.parse(res.getContentText());
+    var txt = out.candidates[0].content.parts[0].text;
+    return { ok: true, data: JSON.parse(txt) };
+  } catch (err) {
+    return { ok: false, error: "応答の解析に失敗: " + err };
+  }
+}
+
+// Gemini接続テスト(APIキー設定後に実行推奨)
+function testGemini() {
+  var r = parseJobWithAI_({ kind: "job", text: "求人名: 介護職員募集\n施設名: テストケアホーム大阪\n勤務地: 大阪市住吉区\n月給: 23万円〜26万円\n必要資格: 初任者研修\n夜勤: あり(月4回程度・相談可)\n受入: 特定技能1号\n日本語: N4以上\n募集人数: 2名" });
+  Logger.log(r.ok ? "✅ Gemini解析OK: " + JSON.stringify(r.data) : "❌ " + r.error);
+}
