@@ -145,7 +145,7 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bot
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
     <table id="candTable"><thead><tr>
-      <th>氏名</th><th>国籍</th><th>在留資格</th><th>在留期限</th><th>日本語</th><th>保有資格</th><th>希望勤務地</th><th>希望月給</th><th>夜勤</th><th>登録日</th><th>ステータス</th><th>操作</th>
+      <th>登録日</th><th>氏名</th><th>在留資格 / 期限</th><th>日本語</th><th>保有資格</th><th>希望条件</th><th>ステータス</th><th>操作</th>
     </tr></thead><tbody id="candBody"></tbody></table>
   </div>
 </section>
@@ -467,22 +467,25 @@ function renderCands(){
     .sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   const sb2={"未マッチ":"b-amber","選考中":"b-blue","マッチ済":"b-green","辞退":"b-red","不採用":"b-red"};
   document.getElementById("candBody").innerHTML=list.length?list.map(c=>`<tr>
-    <td><b>${esc(c.name)}</b><br><span class="small">${esc(c.nationality||"")}${c.expYears?` / 経験${c.expYears}年`:""}</span></td>
-    <td>${esc(c.nationality||"-")}</td>
-    <td><span class="badge b-teal">${esc(c.visa||"-")}</span></td>
-    <td>${esc(c.visaExpiry||"-")}</td>
-    <td>${esc(c.jpLevel||"-")}</td>
-    <td>${(c.quals||[]).map(x=>`<span class="badge b-gray">${esc(x)}</span>`).join(" ")||"-"}</td>
-    <td>${esc(c.desiredLoc||"-")}</td>
-    <td>${c.desiredSalary?c.desiredSalary+"万":"-"}</td>
-    <td>${esc(c.night||"-")}</td>
     <td style="white-space:nowrap">${fmtDate(c.createdAt)}</td>
+    <td><b>${esc(c.name)}</b><br><span class="small">${esc(c.nationality||"-")}${c.expYears?` / 経験${c.expYears}年`:""}</span></td>
+    <td><span class="badge b-teal">${esc(c.visa||"-")}</span>${c.visaExpiry?`<br><span class="small">期限: ${esc(c.visaExpiry)}</span>`:""}</td>
+    <td>${esc(c.jpLevel||"-")}</td>
+    <td>${qualBadges(c.quals)}</td>
+    <td><span class="small">${esc(c.desiredLoc||"-")}<br>${c.desiredSalary?c.desiredSalary+"万円":"月給-"} / 夜勤${esc(c.night||"-")}</span></td>
     <td><span class="badge ${sb2[c.status]||"b-gray"}">${esc(c.status)}</span></td>
-    <td style="white-space:nowrap">
+    <td><div style="display:flex;flex-direction:column;gap:4px">
       <button class="btn sm" onclick="gotoRematch('${c.id}')">求人探索</button>
       <button class="btn sm gray" onclick="openCandModal('${c.id}')">編集</button>
       <button class="btn sm danger" onclick="delCand('${c.id}')">削除</button>
-    </td></tr>`).join(""):'<tr><td colspan="12" class="empty">人材が登録されていません。「＋ 人材を登録」から追加、または右上の「デモデータ」でお試しください。</td></tr>';
+    </div></td></tr>`).join(""):'<tr><td colspan="8" class="empty">人材が登録されていません。「＋ 人材を登録」から追加、または右上の「デモデータ」でお試しください。</td></tr>';
+}
+function qualBadges(quals){
+  const q=quals||[];
+  if(!q.length)return "-";
+  const shown=q.slice(0,2).map(x=>`<span class="badge b-gray">${esc(x)}</span>`).join(" ");
+  if(q.length<=2)return shown;
+  return `<span title="${esc(q.join("、"))}">${shown} <span class="badge b-gray">+${q.length-2}</span></span>`;
 }
 function fmtDate(iso){
   if(!iso)return "-";
