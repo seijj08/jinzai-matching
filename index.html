@@ -161,7 +161,7 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bot
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
     <table><thead><tr>
-      <th>求人名</th><th>企業・施設</th><th>職種</th><th>勤務地</th><th>月給</th><th>必要資格</th><th>受入在留資格</th><th>日本語</th><th>夜勤</th><th>状態</th><th>操作</th>
+      <th>求人名</th><th>企業・施設</th><th>職種</th><th>勤務地</th><th>月給</th><th>必要資格</th><th>受入在留資格</th><th>日本語</th><th>夜勤</th><th>最終確認</th><th>状態</th><th>操作</th>
     </tr></thead><tbody id="jobBody"></tbody></table>
   </div>
 </section>
@@ -420,6 +420,8 @@ function renderDash(){
       else if(days<=90)alerts.push(`<div class="alert">⏰ <b>${esc(c.name)}</b> の在留期限まで残り${days}日（${c.visaExpiry}）</div>`);
     }
   });
+  const needCheck=DB.jobs.filter(j=>j.status==="募集中"&&jobCheckDays(j)>=7);
+  if(needCheck.length)alerts.push(`<div class="alert">📋 募集状況の確認が1週間以上されていない求人が <b>${needCheck.length}件</b> あります（求人プールの「最終確認」列から確認し「✓ 確認済にする」を押してください）</div>`);
   document.getElementById("dashAlerts").innerHTML=alerts.join("")||'<div class="empty">アラートはありません</div>';
   const rows=unmatched.map(c=>{
     const fits=open.map(j=>({j,m:evalMatch(c,j)})).filter(x=>!x.m.hardNG&&x.m.score>=67).sort((a,b)=>b.m.score-a.m.score);
@@ -559,12 +561,33 @@ function renderJobs(){
     <td>${(j.visas||[]).map(x=>`<span class="badge b-teal">${esc(x)}</span>`).join(" ")||"制限なし"}</td>
     <td>${esc(j.jpLevel||"不問")}</td>
     <td>${esc(j.night||"なし")}</td>
+    <td style="white-space:nowrap">${jobCheckBadge(j)}</td>
     <td><span class="badge ${sb2[j.status]||"b-gray"}">${esc(j.status)}</span></td>
-    <td style="white-space:nowrap">
+    <td><div style="display:flex;flex-direction:column;gap:4px">
+      ${j.status==="募集中"?`<button class="btn sm" onclick="markJobChecked('${j.id}')">✓ 確認済にする</button>`:""}
       <button class="btn sm" onclick="gotoJobMatch('${j.id}')">人材探索</button>
       <button class="btn sm gray" onclick="openJobModal('${j.id}')">編集</button>
       <button class="btn sm danger" onclick="delJob('${j.id}')">削除</button>
-    </td></tr>`).join(""):'<tr><td colspan="11" class="empty">求人が登録されていません</td></tr>';
+    </div></td></tr>`).join(""):'<tr><td colspan="12" class="empty">求人が登録されていません</td></tr>';
+}
+// 募集状況の最終確認バッジ(募集中のみ警告色: 7日以上=⚠ / 14日以上=🔴)
+function jobCheckDays(j){
+  const base=j.lastChecked||j.createdAt;
+  return base?Math.floor((Date.now()-new Date(base))/864e5):9999;
+}
+function jobCheckBadge(j){
+  const d=j.lastChecked?fmtDate(j.lastChecked):"未確認";
+  if(j.status!=="募集中")return `<span class="small">${d}</span>`;
+  const days=jobCheckDays(j);
+  if(days>=14)return `<span class="badge b-red">🔴 ${d}</span>`;
+  if(days>=7)return `<span class="badge b-amber">⚠ ${d}</span>`;
+  return `<span class="badge b-green">${d}</span>`;
+}
+async function markJobChecked(id){
+  const j=DB.jobs.find(x=>x.id===id);if(!j)return;
+  j.lastChecked=new Date().toISOString();
+  if(!await upsertRow("gm_jobs",j))return;
+  renderAll();toast("募集状況を確認済にしました");
 }
 let editJobId=null;
 function openJobModal(id){
@@ -587,7 +610,8 @@ async function saveJob(){
     reqQuals:[...document.querySelectorAll("#j_quals input:checked")].map(i=>i.value),
     visas:[...document.querySelectorAll("#j_visas input:checked")].map(i=>i.value),
     jpLevel:gV("j_jp"),night:gV("j_night"),headcount:Number(gV("j_head"))||1,status:gV("j_status"),memo:gV("j_memo"),
-    createdAt:editJobId?(DB.jobs.find(x=>x.id===editJobId)||{}).createdAt:new Date().toISOString()
+    createdAt:editJobId?(DB.jobs.find(x=>x.id===editJobId)||{}).createdAt:new Date().toISOString(),
+    lastChecked:editJobId?(DB.jobs.find(x=>x.id===editJobId)||{}).lastChecked:null
   };
   if(!await upsertRow("gm_jobs",j))return;
   if(editJobId){DB.jobs=DB.jobs.map(x=>x.id===editJobId?j:x);}else{DB.jobs.push(j);}

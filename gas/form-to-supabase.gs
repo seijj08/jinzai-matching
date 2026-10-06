@@ -33,7 +33,11 @@ var CONFIG = {
   SB_PASSWORD: "ここにアプリのログインパスワード",
   // ★Chatwork通知(マッチング成立時)★
   CHATWORK_TOKEN: "ここにChatworkのAPIトークン",
-  CHATWORK_ROOM_ID: "445043916"
+  CHATWORK_ROOM_ID: "445043916",
+  // ★週1回の募集中求人リマインダー(SP会議用)★
+  SP_ROOM_ID: "",            // 送信先ルームID。空ならCHATWORK_ROOM_IDと同じルームに送る
+  DIGEST_DAY: "MONDAY",      // 送信曜日: MONDAY / TUESDAY / WEDNESDAY / THURSDAY / FRIDAY
+  DIGEST_HOUR: 8             // 送信時間帯(8 = 午前8〜9時の間)
 };
 
 // =====================================================================
@@ -526,8 +530,8 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function sendChatwork_(msg) {
-  var res = UrlFetchApp.fetch("https://api.chatwork.com/v2/rooms/" + CONFIG.CHATWORK_ROOM_ID + "/messages", {
+function sendChatwork_(msg, roomId) {
+  var res = UrlFetchApp.fetch("https://api.chatwork.com/v2/rooms/" + (roomId || CONFIG.CHATWORK_ROOM_ID) + "/messages", {
     method: "post",
     headers: { "X-ChatWorkToken": CONFIG.CHATWORK_TOKEN },
     payload: { body: msg },
@@ -543,3 +547,65 @@ function testChatwork() {
   var code = sendChatwork_("マッチング成立！(接続テスト)");
   Logger.log(code === 200 ? "✅ Chatwork送信OK！チャットを確認してください" : "❌ 送信失敗(" + code + ")。トークンとルームIDを確認してください");
 }
+
+// =====================================================================
+// 週1回: 募集中求人の確認リマインダー(SP会議用)
+// 有効化: setupWeeklyDigest() を1回実行(以後、毎週自動送信)
+// =====================================================================
+function weeklyJobDigest() {
+  var token = getSbToken_();
+  var res = UrlFetchApp.fetch(CONFIG.SUPABASE_URL + "/rest/v1/gm_jobs?select=data", {
+    headers: { apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: "Bearer " + token },
+    muteHttpExceptions: true
+  });
+  if (res.getResponseCode() !== 200) throw new Error("求人取得失敗(" + res.getResponseCode() + "): " + res.getContentText());
+
+  var jobs = JSON.parse(res.getContentText()).map(function (r) { return r.data; })
+    .filter(function (j) { return j && j.status === "募集中"; });
+
+  var msg;
+  if (!jobs.length) {
+    msg = "[info][title]📋 SP会議用: 募集中求人の確認リスト[/title]現在「募集中」の求人はありません。[/info]";
+  } else {
+    // 未確認が長い順に並べる
+    jobs.sort(function (a, b) { return jobDays_(b) - jobDays_(a); });
+    var lines = jobs.map(function (j) {
+      var days = jobDays_(j);
+      var mark = days >= 14 ? "🔴" : (days >= 7 ? "⚠" : "・");
+      var checked = j.lastChecked ? fmtDateJp_(j.lastChecked) : "未確認";
+      return mark + " " + j.title + "（" + j.company + (j.location ? " / " + j.location : "") + "）最終確認: " + checked;
+    });
+    msg = "[info][title]📋 SP会議用: 募集中求人の確認リスト[/title]" +
+      "現在「募集中」の求人は " + jobs.length + " 件です。\n" +
+      "（🔴=14日以上未確認 / ⚠=7日以上未確認）\n\n" +
+      lines.join("\n") + "\n\n" +
+      "各求人がまだ募集中か確認し、アプリの求人プールで「✓ 確認済にする」を押してください。\n" +
+      "充足・終了した求人は「編集」から状態を変更してください。\n" +
+      "https://seijj08.github.io/jinzai-matching/[/info]";
+  }
+  var code = sendChatwork_(msg, CONFIG.SP_ROOM_ID || CONFIG.CHATWORK_ROOM_ID);
+  Logger.log(code === 200 ? "✅ リマインダー送信OK(" + jobs.length + "件)" : "❌ 送信失敗(" + code + ")");
+}
+
+function jobDays_(j) {
+  var base = j.lastChecked || j.createdAt;
+  return base ? Math.floor((Date.now() - new Date(base).getTime()) / 864e5) : 9999;
+}
+function fmtDateJp_(iso) {
+  var d = new Date(iso);
+  return isNaN(d) ? "-" : Utilities.formatDate(d, "Asia/Tokyo", "yyyy/MM/dd");
+}
+
+// 週1トリガーを設定(1回実行。再実行すると曜日・時間の変更も反映)
+function setupWeeklyDigest() {
+  ScriptApp.getProjectTriggers().forEach(function (tr) {
+    if (tr.getHandlerFunction() === "weeklyJobDigest") ScriptApp.deleteTrigger(tr);
+  });
+  ScriptApp.newTrigger("weeklyJobDigest").timeBased()
+    .everyWeeks(1).onWeekDay(ScriptApp.WeekDay[CONFIG.DIGEST_DAY]).atHour(CONFIG.DIGEST_HOUR)
+    .inTimezone("Asia/Tokyo").create();
+  Logger.log("✅ 毎週 " + CONFIG.DIGEST_DAY + " " + CONFIG.DIGEST_HOUR + "時台に求人確認リマインダーを送信します");
+}
+
+// リマインダーの送信テスト(今すぐ1回送る)
+function testWeeklyDigest() { weeklyJobDigest(); }
