@@ -145,7 +145,7 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bot
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
     <table id="candTable"><thead><tr>
-      <th>登録日</th><th>氏名</th><th>在留資格 / 期限</th><th>日本語</th><th>保有資格</th><th>希望条件</th><th>ステータス</th><th>操作</th>
+      <th id="thCreated" onclick="toggleCandSort()" style="cursor:pointer;user-select:none" title="クリックで昇順/降順を切り替え">登録日 ▼</th><th>氏名</th><th>在留資格 / 期限</th><th>日本語</th><th>保有資格</th><th>希望条件</th><th>ステータス</th><th>操作</th>
     </tr></thead><tbody id="candBody"></tbody></table>
   </div>
 </section>
@@ -464,7 +464,9 @@ function renderCands(){
   const list=DB.cands.filter(c=>
     (!q||(c.name+c.kana+c.nationality).toLowerCase().includes(q))&&
     (!fs||c.status===fs)&&(!fv||c.visa===fv)&&(!fq||(c.quals||[]).includes(fq)))
-    .sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+    .sort((a,b)=>{const r=(a.createdAt||"").localeCompare(b.createdAt||"");return candSortDir==="desc"?-r:r;});
+  const th=document.getElementById("thCreated");
+  if(th)th.textContent="登録日 "+(candSortDir==="desc"?"▼":"▲");
   const sb2={"未マッチ":"b-amber","選考中":"b-blue","マッチ済":"b-green","辞退":"b-red","不採用":"b-red"};
   document.getElementById("candBody").innerHTML=list.length?list.map(c=>`<tr>
     <td style="white-space:nowrap">${fmtDate(c.createdAt)}</td>
@@ -480,6 +482,8 @@ function renderCands(){
       <button class="btn sm danger" onclick="delCand('${c.id}')">削除</button>
     </div></td></tr>`).join(""):'<tr><td colspan="8" class="empty">人材が登録されていません。「＋ 人材を登録」から追加、または右上の「デモデータ」でお試しください。</td></tr>';
 }
+let candSortDir="desc"; // desc=新しい順 / asc=古い順
+function toggleCandSort(){candSortDir=candSortDir==="desc"?"asc":"desc";renderCands();}
 function qualBadges(quals){
   const q=quals||[];
   if(!q.length)return "-";
