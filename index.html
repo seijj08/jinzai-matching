@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>外国人材マッチング管理</title><!-- v2 -->
+<title>在日人材求人マッチング</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -106,7 +106,7 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bot
 </div>
 
 <header>
-  <div><h1>外国人材マッチング管理</h1><div class="sub"><span id="syncDot"></span>リアルタイム共有 / 社内運用</div></div>
+  <div><h1>在日人材求人マッチング</h1><div class="sub"><span id="syncDot"></span>リアルタイム共有 / 社内運用</div></div>
   <div class="spacer"></div>
   <button class="hbtn" onclick="exportJSON()">📤 バックアップ</button>
   <button class="hbtn" onclick="document.getElementById('importFile').click()">📥 インポート</button>
@@ -244,6 +244,7 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bot
       <div class="fitem"><label>夜勤</label><select id="j_night" style="width:100%"><option>なし</option><option>あり（応相談）</option><option>必須</option></select></div>
       <div class="fitem"><label>募集人数</label><input type="number" id="j_head" min="1" value="1" style="width:100%"></div>
       <div class="fitem"><label>状態</label><select id="j_status" style="width:100%"><option>募集中</option><option>充足</option><option>終了</option></select></div>
+      <div class="fitem wide"><label>求人元データURL（Dropbox等）</label><input type="url" id="j_url" placeholder="https://www.dropbox.com/..." style="width:100%"></div>
       <div class="fitem wide"><label>メモ</label><textarea id="j_memo"></textarea></div>
     </div>
     <div class="actions">
@@ -552,7 +553,7 @@ function renderJobs(){
   const list=DB.jobs.filter(j=>(!q||(j.title+j.company).toLowerCase().includes(q))&&(!fs||j.status===fs));
   const sb2={"募集中":"b-green","充足":"b-blue","終了":"b-gray"};
   document.getElementById("jobBody").innerHTML=list.length?list.map(j=>`<tr>
-    <td><b>${esc(j.title)}</b></td>
+    <td><b>${esc(j.title)}</b>${j.sourceUrl?`<br><a href="${esc(j.sourceUrl)}" target="_blank" rel="noopener" class="small">📎 元データ</a>`:""}</td>
     <td>${esc(j.company)}</td>
     <td>${esc(j.jobType||"-")}</td>
     <td>${esc(j.location||"-")}</td>
@@ -597,7 +598,7 @@ function openJobModal(id){
   const j=id?DB.jobs.find(x=>x.id===id):{};
   setV("j_title",j.title);setV("j_company",j.company);setV("j_type",j.jobType||"介護職員（施設）");setV("j_loc",j.location);
   setV("j_salMin",j.salaryMin);setV("j_salMax",j.salaryMax);setV("j_jp",j.jpLevel);setV("j_night",j.night||"なし");
-  setV("j_head",j.headcount||1);setV("j_status",j.status||"募集中");setV("j_memo",j.memo);
+  setV("j_head",j.headcount||1);setV("j_status",j.status||"募集中");setV("j_url",j.sourceUrl);setV("j_memo",j.memo);
   document.querySelectorAll("#j_quals input").forEach(i=>i.checked=(j.reqQuals||[]).includes(i.value));
   document.querySelectorAll("#j_visas input").forEach(i=>i.checked=(j.visas||[]).includes(i.value));
   document.getElementById("jobModal").classList.add("open");
@@ -609,7 +610,7 @@ async function saveJob(){
     salaryMin:Number(gV("j_salMin"))||null,salaryMax:Number(gV("j_salMax"))||null,
     reqQuals:[...document.querySelectorAll("#j_quals input:checked")].map(i=>i.value),
     visas:[...document.querySelectorAll("#j_visas input:checked")].map(i=>i.value),
-    jpLevel:gV("j_jp"),night:gV("j_night"),headcount:Number(gV("j_head"))||1,status:gV("j_status"),memo:gV("j_memo"),
+    jpLevel:gV("j_jp"),night:gV("j_night"),headcount:Number(gV("j_head"))||1,status:gV("j_status"),sourceUrl:gV("j_url"),memo:gV("j_memo"),
     createdAt:editJobId?(DB.jobs.find(x=>x.id===editJobId)||{}).createdAt:new Date().toISOString(),
     lastChecked:editJobId?(DB.jobs.find(x=>x.id===editJobId)||{}).lastChecked:null
   };
