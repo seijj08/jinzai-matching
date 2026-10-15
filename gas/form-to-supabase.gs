@@ -292,6 +292,7 @@ function onFormSubmit(e) {
     var cand = buildCandidate_(a, e.source.getTitle());
     insertToSupabase_(cand);
     Logger.log("✅ 人材プールに登録: " + cand.name);
+    notifyHighMatches_(cand); // マッチ率80%以上の求人があればChatworkに通知(失敗しても登録は成立)
   } catch (err) {
     Logger.log("❌ エラー: " + err + "\n" + (err.stack || ""));
     throw err; // 失敗として記録させる(Apps Scriptのエラー通知メールが飛ぶ)
@@ -676,6 +677,57 @@ function parseJobWithAI_(body) {
   } catch (err) {
     return { ok: false, error: "応答の解析に失敗: " + err };
   }
+}
+
+// =====================================================================
+// 高マッチ通知: 人材登録時にマッチ率80%以上の募集中求人があればChatworkへ
+// 判定ロジックはアプリのevalMatchと同一(6条件、在留資格/日本語の不適合は除外)
+// =====================================================================
+var JPLV_ = { "N1": 5, "N2": 4, "N3": 3, "N4": 2, "JFT-Basic": 2, "N5": 1, "": 0 };
+
+function matchScore_(c, j) {
+  var visaOK = !(j.visas && j.visas.length) || j.visas.indexOf(c.visa) >= 0;
+  var jpOK = !j.jpLevel || (JPLV_[c.jpLevel || ""] || 0) >= (JPLV_[j.jpLevel] || 0);
+  var req = j.reqQuals || [];
+  var qualOK = req.every(function (q) { return (c.quals || []).indexOf(q) >= 0; });
+  var locOK = true;
+  if (j.location && c.desiredLoc) {
+    var wants = String(c.desiredLoc).split(/[、,\/・\s]+/).filter(Boolean);
+    locOK = wants.some(function (w) { return j.location.indexOf(w) >= 0 || w.indexOf(j.location) >= 0; });
+  }
+  var salOK = true;
+  if (c.desiredSalary && (j.salaryMax || j.salaryMin)) { salOK = (j.salaryMax || j.salaryMin) >= c.desiredSalary; }
+  var nightOK = !(j.night === "必須" && c.night === "不可");
+  var passed = [visaOK, jpOK, qualOK, locOK, salOK, nightOK].filter(Boolean).length;
+  return { score: Math.round(passed / 6 * 100), hardNG: (!visaOK || !jpOK) };
+}
+
+function notifyHighMatches_(cand) {
+  try {
+    var token = getSbToken_();
+    var res = UrlFetchApp.fetch(CONFIG.SUPABASE_URL + "/rest/v1/gm_jobs?select=data", {
+      headers: { apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: "Bearer " + token },
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) { Logger.log("高マッチ通知: 求人取得失敗(" + res.getResponseCode() + ")"); return; }
+    var jobs = JSON.parse(res.getContentText()).map(function (r) { return r.data; })
+      .filter(function (j) { return j && j.status === "募集中"; });
+    var hits = jobs.map(function (j) { return { j: j, m: matchScore_(cand, j) }; })
+      .filter(function (x) { return !x.m.hardNG && x.m.score >= 80; })
+      .sort(function (a, b) { return b.m.score - a.m.score; });
+    if (!hits.length) return;
+    var lines = hits.slice(0, 5).map(function (x) {
+      return "・" + x.j.title + "（" + x.j.company + (x.j.location ? " / " + x.j.location : "") + "）" + x.m.score + "%";
+    });
+    var msg = "[info][title]🎯 マッチ率80%以上の人材が登録されました[/title]" +
+      "人材: " + cand.name + (cand.nationality ? "（" + cand.nationality + "）" : "") +
+      (cand.visa ? " / " + cand.visa : "") + "\n" +
+      "適合求人 " + hits.length + "件:\n" + lines.join("\n") +
+      (hits.length > 5 ? "\n…ほか" + (hits.length - 5) + "件" : "") +
+      "\n\nアプリで確認: https://seijj08.github.io/jinzai-matching/[/info]";
+    sendChatwork_(msg);
+    Logger.log("🎯 高マッチ通知を送信(" + hits.length + "件)");
+  } catch (e) { Logger.log("高マッチ通知エラー(登録処理は成立): " + e); }
 }
 
 // Gemini接続テスト(APIキー設定後に実行推奨)
