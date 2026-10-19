@@ -136,8 +136,9 @@ function setup() {
   ensureNationality_(src, "id");
   ensureExtraQuestions_(src, "id");
   ensureConsent_(src, "id");
+  ensureNoneHints_(src, "id");
   ensureAllRequired_(src);
-  Logger.log("✅ インドネシア語版の質問を更新しました(全問必須)");
+  Logger.log("✅ インドネシア語版の質問を更新しました(全問必須・『なし』案内付き)");
 
   // 2) ミャンマー語版・ベトナム語版を作成(既にあれば再利用)+ 翻訳 + 質問追加
   var myId = ensureTranslatedCopy_("my");
@@ -240,6 +241,7 @@ function ensureTranslatedCopy_(lang) {
   ensureNationality_(form, lang);
   ensureExtraQuestions_(form, lang);
   ensureConsent_(form, lang);
+  ensureNoneHints_(form, lang);
   ensureAllRequired_(form);
   publishForm_(form, t.formName);
   return form.getId();
@@ -260,6 +262,24 @@ function ensureConsent_(form, lang) {
   var item = form.addCheckboxItem();
   item.setTitle(def.title).setHelpText(def.help).setChoiceValues(def.choices).setRequired(true);
   // 追加した質問は自動的に最下部に入る(移動不要)
+}
+
+// 「ない場合は『なし』と記入」の案内を該当質問に付ける(全問必須化に伴う運用)
+var NONE_HINT = {
+  id: 'Jika tidak ada, tulis "tidak ada"（ない場合は「tidak ada」と記入してください）',
+  my: 'မရှိပါက「မရှိ」ဟုရေးပါ（ない場合は「မရှိ」と記入してください）',
+  vi: 'Nếu không có, ghi "không có"（ない場合は「không có」と記入してください）'
+};
+function ensureNoneHints_(form, lang) {
+  var hint = NONE_HINT[lang];
+  var targets = ["日本の番号", "求人コード", "残り在留期限", "会社名"];
+  form.getItems().forEach(function (it) {
+    var title = it.getTitle();
+    var isTarget = targets.some(function (k) { return title.indexOf(k) >= 0; });
+    if (isTarget && it.getType() === FormApp.ItemType.TEXT) {
+      it.asTextItem().setHelpText(hint);
+    }
+  });
 }
 
 // フォームの全質問を必須にする
