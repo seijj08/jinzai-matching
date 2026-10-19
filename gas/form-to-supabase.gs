@@ -56,8 +56,8 @@ var TRANSLATIONS = {
       night: { title: "Kerja Shift Malam（夜勤）", choices: ["Bisa（可）", "Tidak bisa（不可）", "Perlu konsultasi（要相談）"] },
       consent: {
         title: "Persetujuan Pemberian Data Pribadi（個人情報提供への同意）",
-        help: "Data pribadi yang Anda isi akan digunakan untuk pendaftaran kerja dan pencocokan lowongan, dan dapat diberikan kepada perusahaan yang menawarkan pekerjaan.（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供する場合があります。）",
-        choices: ["Setuju（同意する）", "Tidak setuju（同意しない）"]
+        help: "Data pribadi yang Anda isi akan digunakan untuk pendaftaran kerja dan pencocokan lowongan, dan akan diberikan kepada perusahaan yang menawarkan pekerjaan. Apakah Anda setuju untuk memberikan data pribadi Anda?（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供します。あなたの個人情報を提供することに同意しますか？同意いただけない場合は応募できません。）",
+        choices: ["Setuju（同意する）"]
       }
     }
   },
@@ -88,8 +88,8 @@ var TRANSLATIONS = {
       jobCode: "အလုပ်ကုဒ်နံပါတ်（求人コード）",
       consent: {
         title: "ကိုယ်ရေးကိုယ်တာအချက်အလက် ပေးအပ်ခြင်းအတွက် သဘောတူညီချက်（個人情報提供への同意）",
-        help: "ဖြည့်သွင်းထားသော ကိုယ်ရေးကိုယ်တာအချက်အလက်များကို အလုပ်အကိုင်မိတ်ဆက်ခြင်းနှင့် လိုက်ဖက်မှုရှာဖွေခြင်း ရည်ရွယ်ချက်ဖြင့် အသုံးပြုပြီး အလုပ်ခန့်မည့် ကုမ္ပဏီများသို့ ပေးအပ်နိုင်ပါသည်။（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供する場合があります。）",
-        choices: ["သဘောတူပါသည်（同意する）", "သဘောမတူပါ（同意しない）"]
+        help: "ဖြည့်သွင်းထားသော ကိုယ်ရေးကိုယ်တာအချက်အလက်များကို အလုပ်အကိုင်မိတ်ဆက်ခြင်းနှင့် လိုက်ဖက်မှုရှာဖွေခြင်း ရည်ရွယ်ချက်ဖြင့် အသုံးပြုပြီး အလုပ်ခန့်မည့် ကုမ္ပဏီများသို့ ပေးအပ်ပါမည်။ သင်၏ ကိုယ်ရေးကိုယ်တာအချက်အလက်များ ပေးအပ်ရန် သဘောတူပါသလား။（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供します。あなたの個人情報を提供することに同意しますか？同意いただけない場合は応募できません。）",
+        choices: ["သဘောတူပါသည်（同意する）"]
       }
     }
   },
@@ -120,8 +120,8 @@ var TRANSLATIONS = {
       jobCode: "Mã công việc（求人コード）",
       consent: {
         title: "Đồng ý cung cấp thông tin cá nhân（個人情報提供への同意）",
-        help: "Thông tin cá nhân bạn cung cấp sẽ được sử dụng cho mục đích giới thiệu việc làm và kết nối tuyển dụng, và có thể được cung cấp cho các công ty tuyển dụng.（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供する場合があります。）",
-        choices: ["Đồng ý（同意する）", "Không đồng ý（同意しない）"]
+        help: "Thông tin cá nhân bạn cung cấp sẽ được sử dụng cho mục đích giới thiệu việc làm và kết nối tuyển dụng, và sẽ được cung cấp cho các công ty tuyển dụng. Bạn có đồng ý cung cấp thông tin cá nhân của mình không?（ご回答いただいた個人情報は、お仕事のご紹介・マッチング業務の目的で利用し、紹介先企業等へ提供します。あなたの個人情報を提供することに同意しますか？同意いただけない場合は応募できません。）",
+        choices: ["Đồng ý（同意する）"]
       }
     }
   }
@@ -136,7 +136,8 @@ function setup() {
   ensureNationality_(src, "id");
   ensureExtraQuestions_(src, "id");
   ensureConsent_(src, "id");
-  Logger.log("✅ インドネシア語版の質問を更新しました");
+  ensureAllRequired_(src);
+  Logger.log("✅ インドネシア語版の質問を更新しました(全問必須)");
 
   // 2) ミャンマー語版・ベトナム語版を作成(既にあれば再利用)+ 翻訳 + 質問追加
   var myId = ensureTranslatedCopy_("my");
@@ -235,22 +236,46 @@ function ensureTranslatedCopy_(lang) {
     }
   });
 
-  // 国籍・希望月給・夜勤・同意確認がまだ無ければ追加
+  // 国籍・希望月給・夜勤・同意確認がまだ無ければ追加 → 全問必須化
   ensureNationality_(form, lang);
   ensureExtraQuestions_(form, lang);
   ensureConsent_(form, lang);
+  ensureAllRequired_(form);
   publishForm_(form, t.formName);
   return form.getId();
 }
 
-// 個人情報提供への同意質問をフォーム最下部に追加(既にあれば何もしない)
+// 個人情報提供への同意質問をフォーム最下部に設置。
+// 「同意する」にチェックしないと送信できない形式(チェックボックス必須)。
+// 旧形式(同意する/同意しないのラジオボタン)が残っていたら作り直す。
 function ensureConsent_(form, lang) {
   var def = TRANSLATIONS[lang].byKey.consent;
-  var exists = form.getItems().some(function (it) { return it.getTitle().indexOf("同意") >= 0; });
-  if (exists) return;
-  var item = form.addMultipleChoiceItem();
+  var existing = null;
+  form.getItems().forEach(function (it) { if (!existing && it.getTitle().indexOf("同意") >= 0) existing = it; });
+  if (existing && existing.getType() === FormApp.ItemType.CHECKBOX) {
+    existing.asCheckboxItem().setTitle(def.title).setHelpText(def.help).setChoiceValues(def.choices).setRequired(true);
+    return;
+  }
+  if (existing) form.deleteItem(existing.getIndex()); // 旧ラジオ形式は削除して作り直し
+  var item = form.addCheckboxItem();
   item.setTitle(def.title).setHelpText(def.help).setChoiceValues(def.choices).setRequired(true);
   // 追加した質問は自動的に最下部に入る(移動不要)
+}
+
+// フォームの全質問を必須にする
+function ensureAllRequired_(form) {
+  var T = FormApp.ItemType;
+  form.getItems().forEach(function (it) {
+    var q = null, t = it.getType();
+    if (t === T.TEXT) q = it.asTextItem();
+    else if (t === T.PARAGRAPH_TEXT) q = it.asParagraphTextItem();
+    else if (t === T.MULTIPLE_CHOICE) q = it.asMultipleChoiceItem();
+    else if (t === T.CHECKBOX) q = it.asCheckboxItem();
+    else if (t === T.LIST) q = it.asListItem();
+    else if (t === T.DATE) q = it.asDateItem();
+    else if (t === T.DATETIME) q = it.asDateTimeItem();
+    if (q) q.setRequired(true);
+  });
 }
 
 // フォームを公開状態にする(未公開だと回答者URLが「ページがありません」になる)
